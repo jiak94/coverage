@@ -1,0 +1,5 @@
+*.pyc
+*.i64
+*.so_addr
+*_trace/
+library/
