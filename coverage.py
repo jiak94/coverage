@@ -155,10 +155,14 @@ def capture_maps(pid):
     format_stdout = filter(None, format_stdout)
 
     for lib in config.lib_list:
+        res[lib] = '0x000'
         for line in format_stdout:
-            if 'x' in line[2] and lib == line[3]:
-                res[lib] = "0x"+line[0]
-                break
+            try:
+                if 'x' in line[2] and lib == line[3]:
+                    res[lib] = "0x"+line[0]
+                    break
+            except:
+                pass
 
     return res
 
@@ -183,6 +187,7 @@ def main():
 
     file_input = config.file_input
     program = config.target_bin
+    program_option = config.target_option
     testcase = config.testcase
     pause_addr = config.pause_addr
 
@@ -211,7 +216,7 @@ def main():
 
     for file in sorted(os.listdir(testcase)):
         if file_input:
-            command = program + ' ' + os.path.join(testcase, file)
+            command = program + ' ' + program_option + ' ' + os.path.join(testcase, file)
         else:
             with open(os.path.join(testcase, file), 'r') as testcase_file:
                 data = testcase_file.read().replace('\n', '')
