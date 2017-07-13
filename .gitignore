@@ -1,5 +1,9 @@
 *.pyc
 *.i64
-*.so_addr
+*._addr
 *_trace/
 library/
+aw/
+error/
+*_result/
+stop_test
