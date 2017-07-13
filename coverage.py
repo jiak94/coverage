@@ -1,11 +1,10 @@
-import shlex
-import psutil
-import subprocess
-import signal
+import shlex, psutil, subprocess, signal, sys, os, time
 from datetime import datetime
-import sys, os
 import config
-import time
+
+global global_hit, so_global_hit
+global_hit = list()
+so_global_hit = dict()
 
 def capture_bb(filename):
     with open(filename, 'r') as bb_file:
@@ -30,6 +29,19 @@ def calculate_lib_addr(maps):
             lib_map[idx] = new_addr
 
         res[lib] = lib_map
+    return res
+
+def calculate_lib_offset(maps, lib_addr):
+    res = dict()
+    for lib in config.lib_list:
+        base_addr = maps[lib]
+        base_addr = int(base_addr, 16)
+        res[lib] = list()
+        # for index, val in enumerate(lib_addr[lib]):
+        #     res[lib][index] = hex(int(lib_addr[lib][index], 16) - base_addr)
+        for addr in lib_addr[lib]:
+            res[lib].append(hex(int(addr, 16) - base_addr))
+
     return res
 
 def capture_log(program_exec_command, logname, testcase, lib_list, main_addr):
@@ -67,12 +79,15 @@ def capture_log(program_exec_command, logname, testcase, lib_list, main_addr):
         print "Program or Qemu crashed, please check error log for more information"
         write_error_log(testcase, stderr)
 
-    binary_bb_hit, all_bb_hit = process_trace(logname)
-    return binary_bb_hit, all_bb_hit, mem_bb
+    binary_bb_hit, mem_bb_hit = process_trace(logname, mem_bb, mem_map)
+    return binary_bb_hit, mem_bb_hit, mem_bb
 
-def process_trace(logname):
+def process_trace(logname, mem_bb, maps):
     binary_bb_hit = list()
-    other_bb_hit = list()
+    mem_bb_hit = dict()
+
+    for key, val in maps.iteritems():
+        mem_bb_hit[key] = list()
 
     with open(logname, 'r') as log:
         lines = log.readlines()
@@ -90,14 +105,18 @@ def process_trace(logname):
             if int(line, 16) >= int(start_code, 16) and int(line, 16) < int(end_code, 16):
                 binary_bb_hit.append(line)
             else:
-                other_bb_hit.append(line)
+			    for key, val in mem_bb.iteritems():
+			        if line in mem_bb[key]:
+						mem_bb_hit[key].append(line)
 
-    with open(logname+'.trace', 'a+') as f:
-        for line in binary_bb_hit:
-            f.write(line)
-            f.write('\n')
+    mem_bb_hit = calculate_lib_offset(maps, mem_bb_hit)
 
-    return list(set(binary_bb_hit)), list(set(other_bb_hit))
+    # with open(logname+'.trace', 'a+') as f:
+    #     for line in binary_bb_hit:
+    #         f.write(line)
+    #         f.write('\n')
+
+    return list(set(binary_bb_hit)), mem_bb_hit
 
 # if a "hit" addr not in bb addr lifted by ida, remove it
 def correct_ida_lift(hit_list, bb_list):
@@ -111,27 +130,29 @@ def correct_ida_lift(hit_list, bb_list):
     return bb_list
 
 def statistic(hit_list, bb_list):
-    hit = list()
+    return (len(hit_list)/float(len(bb_list))) * 100
 
+def merge_hit(hit_list, so=False, name=None):
+    if so:
+        if name is None:
+            return
+        else:
+            for addr in hit_list:
+                if addr not in so_global_hit[name]:
+                    so_global_hit[name].append(addr)
+
+        return
     for addr in hit_list:
-        if addr in bb_list:
-            hit.append(addr)
-
-    # remove duplicate entries
-    hit = list(set(hit))
-
-    return (len(hit)/float(len(bb_list))) * 100, len(hit)
-
-def merge_hit(global_hit, hit_map):
-    for addr in hit_map:
         if addr not in global_hit:
             global_hit.append(addr)
 
-    return global_hit
-
 def write_error_log(testcase, error_meg):
+    error_folder = "error/"
+    if not os.path.exists(error_folder):
+        os.makedirs(error_folder)
+
     logname = datetime.now().strftime(testcase +'_error_%m-%d_%H:%M:%S')
-    f = open(logname, 'a+')
+    f = open(error_folder + logname, 'a+')
     f.write(error_meg + '\n')
     f.close()
 
@@ -175,6 +196,22 @@ def write_hit_log(hit_list):
 
     f.close()
 
+def find_shortest(testcase1, testcase2):
+    pass
+
+def find_start(target_binary):
+    command = 'readelf -h ' + target_binary
+    proc = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout = proc.stdout.read()
+    stderr = proc.stdout.read()
+    if len(stderr) != 0:
+        return -1
+
+    stdout = stdout.split('\n')
+    for line in stdout:
+        if "Entry point address" in line:
+            return line[line.find('0x'):]
+
 def main():
     if 'QEMU' not in os.environ:
         print "Please set QEMU binary root. export QEMU=qemu_bin"
@@ -190,7 +227,14 @@ def main():
     program_option = config.target_option
     testcase = config.testcase
     pause_addr = config.pause_addr
+    save_result = config.save_result
 
+    if len(pause_addr) == 0:
+        pause_addr = find_start(program)
+
+    if pause_addr == -1:
+        print "Please specified the start address of the target binary"
+        sys.exit(2)
 
     # basic block address capture from ida
     addr_filename = program + '_addr'
@@ -198,17 +242,14 @@ def main():
     # all bb addrs lifted by ida
     bb_list = capture_bb(addr_filename)
 
-    # overall hit map
-    global_hit = list()
+    for item in lib_list:
+        so_global_hit[item] = list()
 
     # Set up a log folder for certain binary
     log_folder = program + "_trace/"
 
     if not os.path.exists(log_folder):
         os.makedirs(log_folder)
-
-    # Used to store results, key=testcase, vaule=[coverage, total_executed_block]
-    result = dict()
 
     print "Result"
     print "Total Basic Blocks: " + str(len(bb_list))
@@ -223,68 +264,65 @@ def main():
             command = program + ' ' + data
 
         logname = log_folder +  program + '.' + file + '.log'
-        binary_bb_hit, other_bb_hit, mem_bb = capture_log(command, logname, file,lib_list, pause_addr)
+        binary_bb_hit, mem_bb_hit, mem_bb = capture_log(command, logname, file,lib_list, pause_addr)
 
-        # bb_hit = filter(bb_hit, bb_list)
         """
         If QEMU execute a block is not lifted by ida, adjust bb_list
         """
         bb_list = correct_ida_lift(binary_bb_hit, bb_list)
 
-        global_hit = merge_hit(global_hit, binary_bb_hit)
-        result[file] = dict()
+        merge_hit(binary_bb_hit)
 
         print file + ": "
         if config.test_object == 1 or config.test_object == 0:
-            coverage, bin_hit_count = statistic(binary_bb_hit, bb_list)
+            coverage = statistic(binary_bb_hit, bb_list)
             if config.show_hit_count:
-                print "binary hit count: " + str(bin_hit_count)
-            result[file]['coverage'] = coverage
+                print "binary hit count: " + str(len(binary_bb_hit))
             print "coverage: " + str(coverage) + '%'
 
-            result[file]['binary_bb'] = len(binary_bb_hit)
             print "bb in binary: " + str(len(binary_bb_hit))
 
-            result[file]['non_binary_bb'] = len(other_bb_hit)
-            print "bb not in binary: " + str(len(other_bb_hit))
-
-            result[file]['total_bb'] = len(other_bb_hit) + len(binary_bb_hit)
 
         if config.test_object is 0 or config.test_object is 2:
-            result[file]['libs'] = dict()
             # import IPython; IPython.embed()
             for lib in lib_list:
-                # so_coverage, so_hit_count = statistic(other_bb_hit, mem_bb[lib])
-                # print len(mem_bb[lib])
-                # print len(other_bb_hit)
-                so_coverage, so_hit_count = statistic(other_bb_hit, mem_bb[lib])
+                so_coverage = statistic(mem_bb_hit[lib], mem_bb[lib])
+                merge_hit(mem_bb_hit[lib], True, lib)
                 if config.show_hit_count:
-                    result[file]['libs'][lib] = so_coverage
-                    print lib + " hit count: " + str(so_hit_count)
+                    print lib + " hit count: " + str(len(mem_bb_hit[lib]))
                 print lib + " coverage: " + str(so_coverage) + '%'
 
 
         print ""
 
-        # result[file]['coverage'], result[file]['hit_in_ida'] = statistic(binary_bb_hit, bb_list)
-
-
-    # for file, res in sorted(result.iteritems()):
-    #     print file + ":"
-    #     print 'total executed bb: ' + str(res['total_bb'])
-    #     print 'bb in binary: ' + str(res['binary_bb'])
-    #     print 'bb in binary AND in bb addrs lifted by ida: ' + str(res['hit_in_ida'])
-    #     print 'bb not in binary: ' + str(res['non_binary_bb'])
-
-    #     for key, value in result[file]['libs'].iteritems():
-    #         print key + " coverage: " + str(value) + '%'
-    #     print 'coverage: ' + str(res['coverage']) + '%'
-    #     print '\n'
     print "==========================================="
-    overall_coverage, overall_hit = statistic(global_hit, bb_list)
+    overall_coverage = statistic(global_hit, bb_list)
     print "Adjusted Total Basic Blocks: " + str(len(bb_list))
-    # print "total bb hit in binary AND bb addres lifted by ida: " + str(overall_hit)
     print "Overall coverage: " + str(overall_coverage) + '%'
+    # print "Overall hit: " + str(len(global_hit))
+    if save_result:
+        write_result(program)
+
+def write_result(program):
+    result_folder = program[program.find('/')+1:] + "_result/"
+
+    if not os.path.exists(result_folder):
+        os.makedirs(result_folder)
+
+    logname = result_folder + datetime.now().strftime(program[program.find('/')+1:] + '_coverage_%m-%d_%H:%M:%S')
+    f = open(logname, "a+")
+    for addr in global_hit:
+        f.write(addr)
+        f.write('\n')
+    f.close()
+
+    for key, val in so_global_hit.iteritems():
+        logname = datetime.now().strftime(key + "_coverage_%m-%d_%H:%M:%S")
+        f = open(logname, "a+")
+        for addr in val:
+            f.write(addr)
+            f.write('\n')
+        f.close()
 
 if __name__ == '__main__':
     main()
