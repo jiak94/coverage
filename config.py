@@ -11,7 +11,7 @@ target_bin = "./readelf"
 target_option = "-h"
 
 # testcase folder path
-testcase = "/bin"
+testcase = "./bin"
 
 # target shared library, can be empty
 lib_list = []

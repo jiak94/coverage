@@ -1,6 +1,8 @@
 import shlex, psutil, subprocess, signal, sys, os, time
+from os.path import join
 from datetime import datetime
 import config
+import check_progress as pg
 
 global global_hit, so_global_hit
 global_hit = list()
@@ -236,6 +238,13 @@ def main():
         print "Please specified the start address of the target binary"
         sys.exit(2)
 
+    lib_addr_dict = dict()
+
+    for lib in lib_list:
+        with open(lib+"_addr", 'r') as f:
+            addr = f.readlines()
+        lib_addr_dict[lib] = addr
+
     # basic block address capture from ida
     addr_filename = program + '_addr'
 
@@ -303,19 +312,45 @@ def main():
     if save_result:
         write_result(program)
 
+    if True:
+        result_folder = program[program.rfind('/')+1:] + "_result/"
+        if not os.path.exists(result_folder):
+            print "Result Folder does not exists"
+            sys.exit(2)
+
+        # result_files = [x for f in listdir(result_folder) if isfile(join(result_folder, f))]
+        result_files = list()
+        for subdir, dirs, files, in os.walk(result_folder):
+            for file in files:
+                result_files.append(join(subdir, file))
+
+        classified_result = pg.classify_result(result_files)
+
+        coverage_dict = dict()
+
+        for key, val in classified_result.iteritems():
+            if key == program[program.rfind('/')+1:]:
+                coverage = pg.parse_results(val, bb_list)
+                coverage_dict[key] = coverage
+            else:
+                coverage = pg.parse_results(val, lib_addr_dict[key])
+                coverage_dict[key] = coverage
+
+        for key, val in coverage_dict.iteritems():
+            pg.generate_report(val, key)
+
 def write_result(program):
-    result_folder = program[program.find('/')+1:] + "_result/"
+    result_folder = program[program.rfind('/')+1:] + "_result/"
 
     if not os.path.exists(result_folder):
         os.makedirs(result_folder)
 
-    logname = result_folder + datetime.now().strftime(program[program.find('/')+1:] + '_coverage_%m-%d_%H:%M:%S')
+    logname = result_folder + datetime.now().strftime(program[program.rfind('/')+1:] + '_coverage_%m-%d_%H:%M:%S')
     f = open(logname, "a+")
     for addr in global_hit:
         f.write(addr)
         f.write('\n')
     f.close()
-
     for key, val in so_global_hit.iteritems():
         logname = datetime.now().strftime(key + "_coverage_%m-%d_%H:%M:%S")
         f = open(logname, "a+")
