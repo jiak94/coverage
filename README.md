@@ -16,6 +16,17 @@ The config file needs the following variables `file_intput`, `pause_addr`, `targ
     * `2`: shared object **ONLY**.
 * `save_result`: Write result to file, should be `True` or `False`
 * `show_hit_count`: If need to show the hit count for binary and shared object, should be `True` or `False`
+* `statistic`: If need coverage percentage, should be `True` or `False`
 * `generage_report`: If need to generage a graph to show the change of each testcase, should be `True` or `False`
 
 # Before Start
+download the modified qemu by executing
+
+    ./qemu.sh
+
+If `statistic` is set to `True` in the config file, then use `lift_bb.py` in ida to lift the basic blocks of the binary. 
+If `lib_list` is not empty, use `lift_bb.py` in ida to lift the basic blocks of the shared objects.
+
+# Executing
+Simply exectue `python coverage.py`
+All the "hit" address are stored in `[binary]_result` as well as the shared objects
