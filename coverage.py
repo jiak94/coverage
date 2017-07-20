@@ -358,7 +358,11 @@ def write_result(program):
         f.write('\n')
     f.close()
     for key, val in so_global_hit.iteritems():
-        logname = datetime.now().strftime(key + "_coverage_%m-%d_%H:%M:%S")
+        result_folder = key + "_result/"
+        if not os.path.exists(result_folder):
+            os.makedirs(result_folder)
+
+        logname = result_folder + datetime.now().strftime(key + "_coverage_%m-%d_%H:%M:%S")
         f = open(logname, "a+")
         for addr in val:
             f.write(addr)
