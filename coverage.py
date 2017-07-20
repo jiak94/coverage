@@ -231,6 +231,9 @@ def main():
     pause_addr = config.pause_addr
     save_result = config.save_result
 
+    with_statistic = config.statistic
+    draw_diagram = config.draw_diagram
+
     if len(pause_addr) == 0:
         pause_addr = find_start(program)
 
@@ -249,7 +252,8 @@ def main():
     addr_filename = program + '_addr'
 
     # all bb addrs lifted by ida
-    bb_list = capture_bb(addr_filename)
+    if with_statistic:
+        bb_list = capture_bb(addr_filename)
 
     for item in lib_list:
         so_global_hit[item] = list()
@@ -261,8 +265,9 @@ def main():
         os.makedirs(log_folder)
 
     print "Result"
-    print "Total Basic Blocks: " + str(len(bb_list))
-    print "==========================================="
+    if with_statistic:
+        print "Total Basic Blocks: " + str(len(bb_list))
+        print "==========================================="
 
     for file in sorted(os.listdir(testcase)):
         if file_input:
@@ -278,41 +283,45 @@ def main():
         """
         If QEMU execute a block is not lifted by ida, adjust bb_list
         """
-        bb_list = correct_ida_lift(binary_bb_hit, bb_list)
+        if with_statistic:
+            bb_list = correct_ida_lift(binary_bb_hit, bb_list)
 
         merge_hit(binary_bb_hit)
 
-        print file + ": "
-        if config.test_object == 1 or config.test_object == 0:
-            coverage = statistic(binary_bb_hit, bb_list)
-            if config.show_hit_count:
-                print "binary hit count: " + str(len(binary_bb_hit))
-            print "coverage: " + str(coverage) + '%'
-
-            print "bb in binary: " + str(len(binary_bb_hit))
-
-
-        if config.test_object is 0 or config.test_object is 2:
-            # import IPython; IPython.embed()
-            for lib in lib_list:
-                so_coverage = statistic(mem_bb_hit[lib], mem_bb[lib])
-                merge_hit(mem_bb_hit[lib], True, lib)
+        if with_statistic:
+            print file + ": "
+            if config.test_object == 1 or config.test_object == 0:
+                coverage = statistic(binary_bb_hit, bb_list)
                 if config.show_hit_count:
-                    print lib + " hit count: " + str(len(mem_bb_hit[lib]))
-                print lib + " coverage: " + str(so_coverage) + '%'
+                    print "binary hit count: " + str(len(binary_bb_hit))
+                print "coverage: " + str(coverage) + '%'
+
+                print "bb in binary: " + str(len(binary_bb_hit))
 
 
-        print ""
+            if config.test_object is 0 or config.test_object is 2:
+                # import IPython; IPython.embed()
+                for lib in lib_list:
+                    so_coverage = statistic(mem_bb_hit[lib], mem_bb[lib])
+                    merge_hit(mem_bb_hit[lib], True, lib)
+                    if config.show_hit_count:
+                        print lib + " hit count: " + str(len(mem_bb_hit[lib]))
+                    print lib + " coverage: " + str(so_coverage) + '%'
+
+
+            print ""
 
     print "==========================================="
-    overall_coverage = statistic(global_hit, bb_list)
-    print "Adjusted Total Basic Blocks: " + str(len(bb_list))
-    print "Overall coverage: " + str(overall_coverage) + '%'
-    # print "Overall hit: " + str(len(global_hit))
+    if with_statistic:
+        overall_coverage = statistic(global_hit, bb_list)
+        print "Overall coverage: " + str(overall_coverage) + '%'
+        print "Adjusted Total Basic Blocks: " + str(len(bb_list))
+    print "Overall hit: " + str(len(global_hit))
+
     if save_result:
         write_result(program)
 
-    if True:
+    if draw_diagram:
         result_folder = program[program.rfind('/')+1:] + "_result/"
         if not os.path.exists(result_folder):
             print "Result Folder does not exists"

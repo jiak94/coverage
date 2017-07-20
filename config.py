@@ -26,3 +26,7 @@ save_result = True
 
 # show hit count
 show_hit_count = True
+
+statistic = False
+
+draw_diagram = False

@@ -34,8 +34,8 @@ def parse_results(result, basic_blocks):
         previous_list += new_hit
         previous_list = list(set(previous_list))
         res = collections.OrderedDict(sorted(res.items()))
-        print res
-        print len(previous_list)
+        # print res
+        # print len(previous_list)
 
     return res
 
@@ -52,7 +52,7 @@ def generate_report(log_dict, title):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     plt.title(title)
-    plt.ylim(0, 100)
+    # plt.ylim(0, 100)
     plt.ylabel('Coverage')
     plt.xlabel('Date')
 
