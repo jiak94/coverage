@@ -29,4 +29,4 @@ show_hit_count = True
 
 statistic = False
 
-draw_diagram = False
+generate_report = False

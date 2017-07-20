@@ -198,9 +198,6 @@ def write_hit_log(hit_list):
 
     f.close()
 
-def find_shortest(testcase1, testcase2):
-    pass
-
 def find_start(target_binary):
     command = 'readelf -h ' + target_binary
     proc = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -232,7 +229,7 @@ def main():
     save_result = config.save_result
 
     with_statistic = config.statistic
-    draw_diagram = config.draw_diagram
+    draw_diagram = config.generate_report
 
     if len(pause_addr) == 0:
         pause_addr = find_start(program)
