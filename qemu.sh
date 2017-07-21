@@ -1,3 +1,4 @@
+#!/bin/bash
 git clone https://github.com/qemu/qemu.git
 cd qemu
 git checkout v2.1.3
