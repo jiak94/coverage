@@ -1,0 +1,97 @@
+diff --git a/cpu-exec.c b/cpu-exec.c
+index ddf300f..63a56d0 100644
+--- a/cpu-exec.c
++++ b/cpu-exec.c
+@@ -36,13 +36,6 @@
+ #include "sysemu/cpus.h"
+ #include "sysemu/replay.h"
+ 
+-#include <unistd.h>
+-#include "shared.h"
+-#include <signal.h>
+-
+-int stop_for_map = 0;
+-char pause_addr[128] = "";
+-
+ /* -icount align implementation. */
+ 
+ typedef struct SyncClocks {
+@@ -152,17 +145,10 @@ static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, TranslationBlock *itb)
+     uint8_t *tb_ptr = itb->tc_ptr;
+ 
+     qemu_log_mask_and_addr(CPU_LOG_EXEC, itb->pc,
+-                           "Trace %p [" TARGET_FMT_lx "] %s\n",
+-                           itb->tc_ptr, itb->pc,
++                           "Trace %p [%d: " TARGET_FMT_lx "] %s\n",
++                           itb->tc_ptr, cpu->cpu_index, itb->pc,
+                            lookup_symbol(itb->pc));
+ 
+-    uint32_t converted_addr = (uint32_t)strtol(pause_addr, NULL, 0);
+-    if (stop_for_map == 1) {
+-        if (converted_addr == itb->pc) {
+-            pause();
+-        }
+-    }
+-
+ #if defined(DEBUG_DISAS)
+     if (qemu_loglevel_mask(CPU_LOG_TB_CPU)
+         && qemu_log_in_addr_range(itb->pc)) {
+diff --git a/include/exec/exec-all.h b/include/exec/exec-all.h
+index 3b826c9..bcde1e6 100644
+--- a/include/exec/exec-all.h
++++ b/include/exec/exec-all.h
+@@ -436,16 +436,11 @@ static inline void tb_add_jump(TranslationBlock *tb, int n,
+          * outside of the lock; nothing to do in this case */
+         return;
+     }
+-    /* qemu_log_mask_and_addr(CPU_LOG_EXEC, tb->pc, */
+-    /*                        "Linking TBs %p [" TARGET_FMT_lx */
+-    /*                        "] index %d -> %p [" TARGET_FMT_lx "]\n", */
+-    /*                        tb->tc_ptr, tb->pc, n, */
+-    /*                        tb_next->tc_ptr, tb_next->pc); */
+     qemu_log_mask_and_addr(CPU_LOG_EXEC, tb->pc,
+-            "Trace %p [" TARGET_FMT_lx "] \n",
+-            tb->tc_ptr, tb->pc);
+-    /* qemu_log_mask_and_addr(CPU_LOG_EXEC, tb->pc, "Trace %p [" TARGET_FMT_lx"] \n", */
+-    /*         tb_next->tc_ptr, tb_next->pc); */
++                           "Linking TBs %p [" TARGET_FMT_lx
++                           "] index %d -> %p [" TARGET_FMT_lx "]\n",
++                           tb->tc_ptr, tb->pc, n,
++                           tb_next->tc_ptr, tb_next->pc);
+ 
+     /* patch the native jump address */
+     tb_set_jmp_target(tb, n, (uintptr_t)tb_next->tc_ptr);
+diff --git a/linux-user/main.c b/linux-user/main.c
+index 229f972..10a3bb3 100644
+--- a/linux-user/main.c
++++ b/linux-user/main.c
+@@ -37,7 +37,6 @@
+ #include "trace/control.h"
+ #include "glib-compat.h"
+ 
+-#include "shared.h"
+ char *exec_path;
+ 
+ int singlestep;
+@@ -3839,12 +3838,6 @@ static void handle_arg_help(const char *arg)
+     usage(EXIT_SUCCESS);
+ }
+ 
+-static void handle_arg_pause(const char *arg)
+-{
+-    stop_for_map = 1;
+-    strncpy(pause_addr, arg, 128);
+-}
+-
+ static void handle_arg_log(const char *arg)
+ {
+     int mask;
+@@ -4033,8 +4026,6 @@ struct qemu_argument {
+ static const struct qemu_argument arg_table[] = {
+     {"h",          "",                 false, handle_arg_help,
+      "",           "print this help"},
+-    {"b",          "",                 true,  handle_arg_pause,
+-     "address",    "pause at addr for memory map"},
+     {"help",       "",                 false, handle_arg_help,
+      "",           ""},
+     {"g",          "QEMU_GDB",         true,  handle_arg_gdb,
