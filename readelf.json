@@ -4,9 +4,9 @@
     "target_binary": "./readelf",
     "target_option": ["-h"],
     "testcase": "./bin",
-    "library": [],
+    "library": ["libc-2.19.so"],
     "save_result": true,
     "test_object": 0,
     "generate_report": false,
-    "show_statistic": true
+    "show_statistic": false
 }

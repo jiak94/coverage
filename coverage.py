@@ -1,10 +1,12 @@
-import shlex, psutil, subprocess, signal, sys, os, time
+import shlex, psutil, subprocess, sys, os, time
 from datetime import datetime
 import json
 
 global global_hit, so_global_hit
 global_hit = list()
 so_global_hit = dict()
+# global start_code, end_code
+# global program
 
 def capture_bb(filename):
     with open(filename, 'r') as bb_file:
@@ -68,7 +70,7 @@ def capture_log(program_exec_command, logname, testcase, lib_list, main_addr, st
 
     # resume fail, kill that process, then execute again without pause
     if p.status is not 'running':
-        os.kill(proc.pid, signal.SIGKILL)
+        p.kill()
         command = usermode_command + " " + logname + " " + program_exec_command
         proc = subprocess.Popen(shlex.split(command),
                                 shell=False,
@@ -99,13 +101,15 @@ def process_trace(logname, maps):
 
     with open(logname, 'r') as log:
         lines = log.readlines()
-
+    # import IPython;IPython.embed()
     for line in lines:
-        if 'end_code' in line:
-            end_code = line[line.find('0x'):].strip()
+        # if 'end_code' in line:
+        #     end_code = line[line.find('0x'):].strip()
+        #     print end_code
 
-        if 'start_code' in line:
-            start_code = line[line.find('0x'):].strip()
+        # if 'start_code' in line:
+        #     start_code = line[line.find('0x'):].strip()
+        #     print start_code
 
         if 'Trace' in line:
             line = "0x" + line[line.find('[') + 1: line.rfind(']')].lstrip("0")
@@ -187,7 +191,7 @@ def capture_maps(pid):
         format_stdout.append(split_line)
 
     format_stdout = filter(None, format_stdout)
-
+    # import IPython; IPython.embed()
     for lib in lib_list:
         res[lib] = list()
         # import IPython; IPython.embed()
@@ -202,6 +206,18 @@ def capture_maps(pid):
                     break
             except:
                 pass
+
+    for line in format_stdout:
+        # import IPython;IPython.embed()
+
+        # print program
+        if 'x' in line[2] and line[3] in program:
+            global start_code
+            global end_code
+            start_code = "0x"+line[0]
+            size = line[1][:-1]
+            end_code = calculate(start_code, int(size))
+            break
 
     return res
 
@@ -248,6 +264,7 @@ def main():
     lib_list = config['library']
 
     file_input = config['file_input']
+    global program
     program = config['target_binary']
     program_option = config['target_option']
 
