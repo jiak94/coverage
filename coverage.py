@@ -44,6 +44,8 @@ def calculate_lib_offset(maps, lib_addr):
             #     res[lib][index] = hex(int(lib_addr[lib][index], 16) - base_addr)
             for addr in lib_addr[lib]:
                 res[lib].append(hex(int(addr, 16) - base_addr))
+
+            res[lib] = list(set(res[lib]))
         except:
             pass
 
@@ -158,10 +160,13 @@ def merge_hit(hit_list, so=False, name=None):
                 if addr not in so_global_hit[name]:
                     so_global_hit[name].append(addr)
 
+        so_global_hit[name] = list(set(so_global_hit[name]))
         return
     for addr in hit_list:
         if addr not in global_hit:
             global_hit.append(addr)
+
+        # global_hit = list(set(global_hit))
 
 def write_error_log(testcase, error_meg):
     error_folder = "error/"
