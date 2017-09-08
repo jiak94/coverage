@@ -1,0 +1,224 @@
+diff --git a/cpu-exec.c b/cpu-exec.c
+index 63a56d0..c943d73 100644
+--- a/cpu-exec.c
++++ b/cpu-exec.c
+@@ -36,6 +36,14 @@
+ #include "sysemu/cpus.h"
+ #include "sysemu/replay.h"
+ 
++#include <unistd.h>
++#include "shared.h"
++#include <signal.h>
++
++int stop_for_map = 0;
++char pause_addr[128] = "";
++uint32_t entry_addr=0;
++
+ /* -icount align implementation. */
+ 
+ typedef struct SyncClocks {
+@@ -145,10 +153,17 @@ static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, TranslationBlock *itb)
+     uint8_t *tb_ptr = itb->tc_ptr;
+ 
+     qemu_log_mask_and_addr(CPU_LOG_EXEC, itb->pc,
+-                           "Trace %p [%d: " TARGET_FMT_lx "] %s\n",
+-                           itb->tc_ptr, cpu->cpu_index, itb->pc,
++                           "Trace %p [" TARGET_FMT_lx "] %s\n",
++                           itb->tc_ptr, itb->pc,
+                            lookup_symbol(itb->pc));
+ 
++    /* uint32_t converted_addr = (uint32_t)strtol(pause_addr, NULL, 0); */
++    if (stop_for_map == 1) {
++        if (entry_addr == itb->pc) {
++            pause();
++        }
++    }
++
+ #if defined(DEBUG_DISAS)
+     if (qemu_loglevel_mask(CPU_LOG_TB_CPU)
+         && qemu_log_in_addr_range(itb->pc)) {
+diff --git a/linux-user/elfload.c b/linux-user/elfload.c
+index f520d77..9fc0d82 100644
+--- a/linux-user/elfload.c
++++ b/linux-user/elfload.c
+@@ -8,6 +8,8 @@
+ #include "disas/disas.h"
+ #include "qemu/path.h"
+ 
++#include "shared.h"
++
+ #ifdef _ARCH_PPC64
+ #undef ARCH_DLINFO
+ #undef ELF_PLATFORM
+@@ -19,7 +21,7 @@
+ #endif
+ 
+ #define ELF_OSABI   ELFOSABI_SYSV
+-
++int loaded = 0;
+ /* from personality.h */
+ 
+ /*
+@@ -2077,6 +2079,11 @@ static void load_elf_image(const char *image_name, int image_fd,
+     info->load_bias = load_bias;
+     info->load_addr = load_addr;
+     info->entry = ehdr->e_entry + load_bias;
++    if (loaded == 0) {
++        entry_addr = info->entry;
++        loaded = 1;
++        printf("entry: %8x\n", entry_addr);
++    }
+     info->start_code = -1;
+     info->end_code = 0;
+     info->start_data = -1;
+diff --git a/linux-user/main.c b/linux-user/main.c
+index 10a3bb3..12a4864 100644
+--- a/linux-user/main.c
++++ b/linux-user/main.c
+@@ -37,6 +37,7 @@
+ #include "trace/control.h"
+ #include "glib-compat.h"
+ 
++#include "shared.h"
+ char *exec_path;
+ 
+ int singlestep;
+@@ -2733,7 +2734,7 @@ void cpu_loop(CPUCRISState *env)
+     CPUState *cs = CPU(cris_env_get_cpu(env));
+     int trapnr, ret;
+     target_siginfo_t info;
+-    
++
+     while (1) {
+         cpu_exec_start(cs);
+         trapnr = cpu_exec(cs);
+@@ -2755,13 +2756,13 @@ void cpu_loop(CPUCRISState *env)
+ 	  /* just indicate that signals should be handled asap */
+ 	  break;
+         case EXCP_BREAK:
+-            ret = do_syscall(env, 
+-                             env->regs[9], 
+-                             env->regs[10], 
+-                             env->regs[11], 
+-                             env->regs[12], 
+-                             env->regs[13], 
+-                             env->pregs[7], 
++            ret = do_syscall(env,
++                             env->regs[9],
++                             env->regs[10],
++                             env->regs[11],
++                             env->regs[12],
++                             env->regs[13],
++                             env->pregs[7],
+                              env->pregs[11],
+                              0, 0);
+             if (ret == -TARGET_ERESTARTSYS) {
+@@ -2803,7 +2804,7 @@ void cpu_loop(CPUMBState *env)
+     CPUState *cs = CPU(mb_env_get_cpu(env));
+     int trapnr, ret;
+     target_siginfo_t info;
+-    
++
+     while (1) {
+         cpu_exec_start(cs);
+         trapnr = cpu_exec(cs);
+@@ -2828,13 +2829,13 @@ void cpu_loop(CPUMBState *env)
+             /* Return address is 4 bytes after the call.  */
+             env->regs[14] += 4;
+             env->sregs[SR_PC] = env->regs[14];
+-            ret = do_syscall(env, 
+-                             env->regs[12], 
+-                             env->regs[5], 
+-                             env->regs[6], 
+-                             env->regs[7], 
+-                             env->regs[8], 
+-                             env->regs[9], 
++            ret = do_syscall(env,
++                             env->regs[12],
++                             env->regs[5],
++                             env->regs[6],
++                             env->regs[7],
++                             env->regs[8],
++                             env->regs[9],
+                              env->regs[10],
+                              0, 0);
+             if (ret == -TARGET_ERESTARTSYS) {
+@@ -3838,6 +3839,11 @@ static void handle_arg_help(const char *arg)
+     usage(EXIT_SUCCESS);
+ }
+ 
++static void handle_arg_pause(const char *arg)
++{
++    stop_for_map = 1;
++}
++
+ static void handle_arg_log(const char *arg)
+ {
+     int mask;
+@@ -4026,6 +4032,8 @@ struct qemu_argument {
+ static const struct qemu_argument arg_table[] = {
+     {"h",          "",                 false, handle_arg_help,
+      "",           "print this help"},
++    {"b",          "",                 false,  handle_arg_pause,
++     "address",    "pause at addr for memory map"},
+     {"help",       "",                 false, handle_arg_help,
+      "",           ""},
+     {"g",          "QEMU_GDB",         true,  handle_arg_gdb,
+@@ -4685,23 +4693,23 @@ int main(int argc, char **argv, char **envp)
+         env->regs[12] = regs->r12;
+         env->regs[13] = regs->r13;
+         env->regs[14] = regs->r14;
+-        env->regs[15] = regs->r15;	    
+-        env->regs[16] = regs->r16;	    
+-        env->regs[17] = regs->r17;	    
+-        env->regs[18] = regs->r18;	    
+-        env->regs[19] = regs->r19;	    
+-        env->regs[20] = regs->r20;	    
+-        env->regs[21] = regs->r21;	    
+-        env->regs[22] = regs->r22;	    
+-        env->regs[23] = regs->r23;	    
+-        env->regs[24] = regs->r24;	    
+-        env->regs[25] = regs->r25;	    
+-        env->regs[26] = regs->r26;	    
+-        env->regs[27] = regs->r27;	    
+-        env->regs[28] = regs->r28;	    
+-        env->regs[29] = regs->r29;	    
+-        env->regs[30] = regs->r30;	    
+-        env->regs[31] = regs->r31;	    
++        env->regs[15] = regs->r15;
++        env->regs[16] = regs->r16;
++        env->regs[17] = regs->r17;
++        env->regs[18] = regs->r18;
++        env->regs[19] = regs->r19;
++        env->regs[20] = regs->r20;
++        env->regs[21] = regs->r21;
++        env->regs[22] = regs->r22;
++        env->regs[23] = regs->r23;
++        env->regs[24] = regs->r24;
++        env->regs[25] = regs->r25;
++        env->regs[26] = regs->r26;
++        env->regs[27] = regs->r27;
++        env->regs[28] = regs->r28;
++        env->regs[29] = regs->r29;
++        env->regs[30] = regs->r30;
++        env->regs[31] = regs->r31;
+         env->sregs[SR_PC] = regs->pc;
+     }
+ #elif defined(TARGET_MIPS)
+@@ -4806,7 +4814,7 @@ int main(int argc, char **argv, char **envp)
+ 	    env->regs[12] = regs->r12;
+ 	    env->regs[13] = regs->r13;
+ 	    env->regs[14] = info->start_stack;
+-	    env->regs[15] = regs->acr;	    
++	    env->regs[15] = regs->acr;
+ 	    env->pc = regs->erp;
+     }
+ #elif defined(TARGET_S390X)
+diff --git a/shared.h b/shared.h
+new file mode 100644
+index 0000000..2207fd3
+--- /dev/null
++++ b/shared.h
+@@ -0,0 +1,2 @@
++extern int stop_for_map;
++extern uint32_t entry_addr;
