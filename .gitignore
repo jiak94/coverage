@@ -1,9 +1,12 @@
 *.pyc
 *.i64
-*._addr
+*_addr
+*_cfg
 *_trace/
+*_result/
 library/
 aw/
 error/
 *_result/
 stop_test
+coverage_env/
