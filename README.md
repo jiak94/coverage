@@ -20,7 +20,7 @@ The config file needs the following variables `file_intput`, `pause_addr`, `targ
     ./qemu.sh
 
 # Executing
-If `statistic` is set to `True` in the config file, please use the ida script `bb_lift.py` to generate the static 
-analysis file for both binary and its shared objects.
+If `statistic` is set to **True** in the config file, please use the ida script `bb_lift.py` to generate the static 
+analysis file for both binary and its shared objects.  
 Simply exectue `python coverage.py config`  
 If `save_result` is set to **True**, a overall hit address will be stored in result folder.
