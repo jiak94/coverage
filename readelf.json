@@ -1,12 +1,11 @@
 {
     "file_input": true,
-    "entry_point": "",
     "target_binary": "./readelf",
-    "target_option": ["-h"],
+    "target_option": ["-a"],
     "testcase": "./bin",
-    "library": ["libc-2.19.so"],
+    "library": ["libc-2.23.so"],
     "save_result": true,
     "test_object": 0,
     "generate_report": false,
-    "show_statistic": false
+    "show_statistic": true
 }
