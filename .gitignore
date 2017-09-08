@@ -10,3 +10,4 @@ error/
 *_result/
 stop_test
 coverage_env/
+qemu/
