@@ -2,9 +2,7 @@
     "file_input": true,
     "target_binary": "./readelf",
     "target_option": ["-a"],
-    "testcase": "./bin",
     "library": ["libc-2.23.so"],
-    "save_result": true,
     "test_object": 0,
-    "show_statistic": true
+    "show_statistic": false
 }
