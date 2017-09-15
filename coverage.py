@@ -28,7 +28,6 @@ def _byteify(data, ignore_dicts=True):
 
 
 class Coverage:
-
     binary_overall_hit = list()
     so_overall_hit = dict()
     lib_addr_dict = dict()
@@ -65,7 +64,6 @@ class Coverage:
     def capture_log(self, program_exec_command, logname, testcase, lib_list):
         command = self.usermode_command + " " + logname + \
             " " + "-b " + " ".join(program_exec_command)
-
         proc = subprocess.Popen(shlex.split(command),
                                 shell=False,
                                 stderr=subprocess.PIPE,
@@ -100,12 +98,12 @@ class Coverage:
             print "Program or Qemu crashed, please check error log for more information"
             self.write_error_log(testcase, stderr)
 
-        binary_bb_hit, libs_bb_hit = self.process_trace(logname, mem_map)
+        binary_bb_hit, libs_bb_hit = self.process_trace(logname, mem_map, testcase)
 
         return binary_bb_hit, libs_bb_hit
 
 
-    def process_trace(self, logname, maps):
+    def process_trace(self, logname, maps, testcase):
         binary_bb_hit = list()
         libs_bb_hit = dict()
 
@@ -138,22 +136,27 @@ class Coverage:
 
         libs_bb_hit = self.calculate_lib_offset(maps, libs_bb_hit)
 
-        testcase_name = logname[logname.rfind('/')+1:]
-        testcase_name = testcase_name[testcase_name.find(
-            '.')+1:testcase_name.rfind('.')]
-        hash_object = hashlib.md5(testcase_name)
+        # testcase_name = logname[logname.rfind('/')+1:]
+        # testcase_name = testcase_name[testcase_name.find(
+        #     '.')+1:testcase_name.rfind('.')]
 
-        filename = datetime.now().strftime(
-            self.result_folder + "bin_" + hash_object.hexdigest())
-        with open(filename, 'a+') as f:
+        hash_obj = hashlib.md5(open(testcase).read())
+
+        filename = "%s%s_%s" % (self.result_folder,
+                                self.program[self.program.rfind('/')+1:],
+                              hash_obj.hexdigest())
+        with open(filename, 'w+') as f:
             for line in binary_bb_hit:
                 f.write(line)
                 f.write('\n')
 
         for key, val in libs_bb_hit.iteritems():
-            filename = datetime.now().strftime(
-                self.result_folder + key + '_'+hash_object.hexdigest())
-            with open(filename, 'a+') as f:
+            # filename = datetime.now().strftime(
+            #     self.result_folder + key + '_'+hash_object.hexdigest())
+            filename = "%s%s_%s" % (self.result_folder,
+                                    key,
+                                    hash_obj.hexdigest())
+            with open(filename, 'w+') as f:
                 for line in val:
                     f.write(line)
                     f.write('\n')
@@ -257,16 +260,14 @@ class Coverage:
         if 'QEMU' not in os.environ:
             print "Please set QEMU binary root. export QEMU=qemu_bin"
             sys.exit(2)
-        configuration = None
-        with open(config_file) as con:
-            configuration = json_load(con)
+
+        configuration = json_load(config_file)
 
         # Load configuration
         self.lib_list = configuration['library']
         self.file_input = configuration['file_input']
         self.program = configuration['target_binary']
         self.program_option = " ".join(configuration['target_option'])
-        self.save_result = configuration['save_result']
         self.with_statistic = configuration['show_statistic']
         self.test_object = configuration['test_object']
 
@@ -308,8 +309,9 @@ class Coverage:
             with open(file) as testcase_file:
                 data = testcase_file.read().replace('\n', '')
             command.append(data)
-
-        logname = self.log_folder + self.program + '.' + file + '.log'
+        logname = "%s%s.%s.log" % (self.log_folder,
+                                   self.program[self.program.rfind('/')+1:],
+                                   file[file.rfind('/')+1:])
 
         binary_bb_hit, libs_bb_hit = self.capture_log(
             command, logname, file, self.lib_list)
@@ -326,6 +328,7 @@ class Coverage:
 
         result = dict()
         result['testcase'] = file
+        result['hash'] = hashlib.md5(open(file, 'rb').read()).hexdigest()
         result['binary_bb_hit'] = binary_bb_hit
         result['bb_list'] = self.bb_list
         result['libs_bb_list'] = self.lib_addr_dict
@@ -335,11 +338,7 @@ class Coverage:
 
 
     def pretty_print(self, result):
-        if self.with_statistic:
-            # print "Total Basic Blocks: " + str(len(result['bb_list']))
-            # print "==========================================="
-
-            print "Testcase: %s " % file.name
+            print "Testcase: %s " % result['testcase']
             print "--Binary Hits: %d" % len(result['binary_bb_hit'])
 
             if self.with_statistic:
@@ -366,33 +365,32 @@ class Coverage:
         print "Binary Overall hit: %d" +  len(self.binary_overall_hit)
 
 
-    # def main():
-        # if draw_diagram:
-        #     result_folder = program[program.rfind('/')+1:] + "_result/"
-        #     if not os.path.exists(result_folder):
-        #         print "Result Folder does not exists"
-        #         sys.exit(2)
+    # def draw_diagram():
+    #     result_folder = program[program.rfind('/')+1:] + "_result/"
+    #     if not os.path.exists(result_folder):
+    #         print "Result Folder does not exists"
+    #         sys.exit(2)
 
-        #     # result_files = [x for f in listdir(result_folder) if isfile(join(result_folder, f))]
-        #     result_files = list()
-        #     for subdir, dirs, files, in os.walk(result_folder):
-        #         for file in files:
-        #             result_files.append(join(subdir, file))
+    #     # result_files = [x for f in listdir(result_folder) if isfile(join(result_folder, f))]
+    #     result_files = list()
+    #     for subdir, dirs, files, in os.walk(result_folder):
+    #         for file in files:
+    #             result_files.append(join(subdir, file))
 
-        #     classified_result = pg.classify_result(result_files)
+    #     classified_result = pg.classify_result(result_files)
 
-        #     coverage_dict = dict()
+    #     coverage_dict = dict()
 
-        #     for key, val in classified_result.iteritems():
-        #         if key == program[program.rfind('/')+1:]:
-        #             coverage = pg.parse_results(val, bb_list)
-        #             coverage_dict[key] = coverage
-        #         else:
-        #             coverage = pg.parse_results(val, lib_addr_dict[key])
-        #             coverage_dict[key] = coverage
+    #     for key, val in classified_result.iteritems():
+    #         if key == program[program.rfind('/')+1:]:
+    #             coverage = pg.parse_results(val, bb_list)
+    #             coverage_dict[key] = coverage
+    #         else:
+    #             coverage = pg.parse_results(val, lib_addr_dict[key])
+    #             coverage_dict[key] = coverage
 
-        #     for key, val in coverage_dict.iteritems():
-        #         pg.generate_report(val, key)
+    #     for key, val in coverage_dict.iteritems():
+    #         pg.generate_report(val, key)
 
 
     def save_result(self):
@@ -410,25 +408,3 @@ class Coverage:
                 f.write(addr)
                 f.write('\n')
             f.close()
-
-
-    # def json_load(self, file_handle):
-    #     return self._byteify(
-    #         json.load(file_handle, object_hook=self._byteify))
-
-
-    # def _byteify(data, ignore_dicts=True):
-    #     if isinstance(data, unicode):
-    #         return data.encode('utf-8')
-    #     if isinstance(data, list):
-    #         return [_byteify(item, ignore_dicts=True) for item in data]
-    #     if isinstance(data, dict) and not ignore_dicts:
-    #         return {
-    #             _byteify(key, ignore_dicts=True): _byteify(value, ignore_dicts=True)
-    #             for key, value in data.iteritems()
-    #         }
-    #     return data
-
-
-# if __name__ == '__main__':
-    # main()
